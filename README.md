@@ -5,6 +5,8 @@ An intelligent AI-powered GitHub PR assistant that automatically responds to cod
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)
 
+> **💡 Note:** This tool uses paid AI APIs (Anthropic/OpenAI). Enable **Demo Mode** for free testing and demonstrations without API costs! See [API Costs & Demo Mode](#-api-costs--demo-mode) section.
+
 ## 🌟 Features
 
 - **🗣️ Natural Language Review Processing**: Tag `@ai-teammate` in PR comments to request fixes
@@ -34,7 +36,7 @@ Development teams waste countless hours on:
 
 - Node.js 20+
 - A GitHub repository
-- An API key from Anthropic (Claude) or OpenAI (GPT-4)
+- An API key from Anthropic (Claude) or OpenAI (GPT-4) **⚠️ Paid service required**
 
 ### Installation
 
@@ -76,6 +78,65 @@ git push
 ```
 
 That's it! 🎉 The AI PR Teammate is now active in your repository.
+
+## 💰 API Costs & Demo Mode
+
+### ⚠️ Important: API Costs
+
+This tool uses paid AI APIs. Each code fix or CI analysis request makes an API call:
+
+**Anthropic Claude (Recommended):**
+- Model: `claude-3-5-sonnet-20241022`
+- Cost: ~$3 per million input tokens, ~$15 per million output tokens
+- Typical request: $0.01-0.05 per code fix (depending on file size)
+- [Anthropic Pricing](https://www.anthropic.com/pricing)
+
+**OpenAI GPT-3.5:**
+- Model: `gpt-3.5-turbo`
+- Cost: ~$0.50 per million input tokens, ~$1.50 per million output tokens
+- Typical request: $0.001-0.01 per code fix
+- [OpenAI Pricing](https://openai.com/pricing)
+
+**Cost Estimates:**
+- Small team (10-20 fixes/day): $5-20/month
+- Medium team (50-100 fixes/day): $20-100/month
+- Large team (200+ fixes/day): $100-500/month
+
+### 🎭 Demo Mode (FREE - No API Costs!)
+
+For demonstrations, testing, or to avoid API costs, enable **Demo Mode**:
+
+```yaml
+# In .github/workflows/ai-pr-teammate.yml
+env:
+  DEMO_MODE: 'true'  # Uses mock AI responses - NO API CALLS!
+  AI_PROVIDER: 'anthropic'
+```
+
+**Demo Mode Features:**
+- ✅ No API calls or costs
+- ✅ Instant responses (no network latency)
+- ✅ Realistic mock code fixes with error handling
+- ✅ Perfect for demos, testing, and development
+- ✅ Shows how the tool works without spending credits
+- ⚠️ Generated fixes are template-based, not contextually perfect
+
+**When to Use Demo Mode:**
+- Hackathon presentations and demos
+- Testing the workflow setup
+- Development and debugging
+- When you want to see the tool in action without costs
+- Training team members on how to use the tool
+
+**When to Use Production Mode:**
+- Real code reviews that need intelligent fixes
+- CI failures that require contextual understanding
+- Production repositories with paying customers
+- When code quality and accuracy matter most
+
+**📚 Detailed Guides:**
+- 🎭 [Demo Mode Setup Guide](./DEMO_MODE_SETUP.md) - Free setup without API costs
+- 💰 [Cost Management Guide](./COST_MANAGEMENT.md) - Complete pricing and optimization strategies
 
 ## 📖 Usage
 
@@ -333,7 +394,7 @@ Contributions are welcome! Here are some ideas:
 
 ### AI not responding?
 
-1. Check that secrets are set correctly
+1. Check that secrets are set correctly (or enable `DEMO_MODE: 'true'` for testing)
 2. Verify the trigger pattern matches (`@ai-teammate`)
 3. Check GitHub Actions logs
 4. Ensure the PR is from a branch in the same repo (not a fork)
@@ -344,11 +405,36 @@ Contributions are welcome! Here are some ideas:
 2. Verify the workflow has `checks: read` permission
 3. Review the CI logs for error patterns
 
+### Getting API errors?
+
+1. Verify your API key is valid
+2. Check you haven't exceeded rate limits
+3. Ensure you have credits/balance in your API account
+4. **Or switch to Demo Mode**: Set `DEMO_MODE: 'true'` to bypass API calls entirely
+
 ### API Rate Limits?
 
 - Use Claude (higher rate limits than OpenAI for most tiers)
 - Add rate limit handling
 - Consider caching responses
+
+### Managing API Costs?
+
+**Enable Demo Mode for testing:**
+```yaml
+env:
+  DEMO_MODE: 'true'
+```
+
+**Cost Optimization Tips:**
+1. Use Demo Mode for demonstrations and testing
+2. Set up branch protection to limit which PRs trigger the bot
+3. Use specific trigger patterns (only respond when tagged with `@ai-teammate`)
+4. Monitor your API usage in Anthropic/OpenAI dashboard
+5. Set spending limits in your API provider account
+6. Consider GPT-3.5-turbo for lower costs (vs GPT-4 or Claude)
+7. Review and approve AI changes before merging to learn patterns
+8. Use for high-value fixes, not trivial formatting changes
 
 ## 📝 License
 
