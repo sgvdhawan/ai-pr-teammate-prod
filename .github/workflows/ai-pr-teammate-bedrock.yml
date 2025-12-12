@@ -1,0 +1,67 @@
+name: AI PR Teammate (AWS Bedrock - Claude Sonnet 4)
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  check_run:
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  ai-pr-teammate:
+    # Only run if comment contains @ai-teammate mention
+    if: |
+      (github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
+      contains(github.event.comment.body, '@ai-teammate')
+    
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run AI PR Teammate with AWS Bedrock
+        env:
+          # GitHub Authentication
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+          # AI Provider Configuration
+          AI_PROVIDER: 'bedrock'
+          
+          # AWS Bedrock Configuration
+          # Add these secrets in: Settings → Secrets and variables → Actions
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-west-2' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          
+          # Bedrock Model Configuration (from your deployment)
+          BEDROCK_MODEL_ID: 'anthropic.claude-sonnet-4-5-20250929-v1:0'
+          BEDROCK_INFERENCE_PROFILE_ID: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0'
+          BEDROCK_ENDPOINT_URL: 'https://bedrock-runtime.us-west-2.amazonaws.com/'
+          
+        run: node src/index.js
+        
+      - name: Output Results
+        if: always()
+        run: |
+          echo "✅ AI PR Teammate execution completed"
+          echo "Check the PR for commits and comments from the AI"
+
