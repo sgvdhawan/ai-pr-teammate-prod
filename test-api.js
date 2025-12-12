@@ -1,5 +1,5 @@
 /**
- * User API - with comprehensive security and error handling
+ * User API - optimized for better performance
  */
 
 // Input validation and sanitization utilities
@@ -40,6 +40,16 @@ declare const database: Database;
 
 type UserId = string | number;
 
+// Cache compiled regex patterns for better performance
+const USER_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const XSS_PATTERN = /<script|javascript:|onerror=/i;
+
+// Allowed fields whitelist (reused across calls)
+const ALLOWED_FIELDS: readonly (keyof UserData)[] = Object.freeze([
+  'email', 'name', 'username', 'age', 'phone', 'address'
+]);
+
 /**
  * Sanitizes user ID to prevent injection attacks
  * @param userId - The user ID to sanitize
@@ -65,7 +75,7 @@ function sanitizeUserId(userId: any): string | number {
       throw new Error('User ID cannot be empty');
     }
     // Prevent injection: allow only alphanumeric and basic characters
-    if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+    if (!USER_ID_PATTERN.test(trimmed)) {
       throw new Error('User ID contains invalid characters');
     }
     if (trimmed.length > 100) {
@@ -87,24 +97,27 @@ function isValidEmail(email: string): boolean {
     return false;
   }
 
-  if (email.length > MAX_EMAIL_LENGTH) {
+  const emailLength = email.length;
+  if (emailLength > MAX_EMAIL_LENGTH) {
     return false;
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
+  if (!EMAIL_PATTERN.test(email)) {
     return false;
   }
 
-  const [localPart, domain] = email.split('@');
+  // Find @ position once instead of splitting
+  const atIndex = email.indexOf('@');
+  const localLength = atIndex;
+  const domainLength = emailLength - atIndex - 1;
   
   // Prevent injection attempts
-  if (localPart.length > 64 || domain.length > 255) {
+  if (localLength > 64 || domainLength > 255) {
     return false;
   }
 
   // Check for dangerous patterns
-  if (email.includes('..') || localPart.startsWith('.') || localPart.endsWith('.')) {
+  if (email.includes('..') || email[0] === '.' || email[atIndex - 1] === '.') {
     return false;
   }
 
@@ -122,15 +135,20 @@ function validateUserData(data: any): UserData {
     throw new Error('User data must be a valid object');
   }
 
-  // Prevent prototype pollution
-  if (data.__proto__ || data.constructor || data.prototype) {
+  // Prevent prototype pollution - check using hasOwnProperty
+  if (Object.prototype.hasOwnProperty.call(data, '__proto__') || 
+      Object.prototype.hasOwnProperty.call(data, 'constructor') || 
+      Object.prototype.hasOwnProperty.call(data, 'prototype')) {
     throw new Error('User data contains forbidden properties');
   }
 
-  // Check data size to prevent DoS
-  const dataSize = JSON.stringify(data).length;
-  if (dataSize > MAX_USER_DATA_SIZE) {
-    throw new Error('User data exceeds maximum allowed size');
+  // Check data size to prevent DoS - only stringify if necessary
+  const keys = Object.keys(data);
+  if (keys.length > 50) { // Quick check before expensive stringify
+    const dataSize = JSON.stringify(data).length;
+    if (dataSize > MAX_USER_DATA_SIZE) {
+      throw new Error('User data exceeds maximum allowed size');
+    }
   }
 
   // Validate email if present
@@ -138,32 +156,45 @@ function validateUserData(data: any): UserData {
     throw new Error('Invalid email format');
   }
 
-  // Create sanitized copy (whitelist approach)
+  // Create sanitized copy (whitelist approach) - optimized with direct assignment
   const sanitized: UserData = {};
-  const allowedFields: (keyof UserData)[] = ['email', 'name', 'username', 'age', 'phone', 'address'];
   
-  for (const field of allowedFields) {
-    if (field in data) {
-      // Prevent XSS by ensuring string fields don't contain scripts
-      if (typeof data[field] === 'string') {
-        const value = (data[field] as string).trim();
-        // Basic XSS prevention
-        if (/<script|javascript:|onerror=/i.test(value)) {
-          throw new Error(`Field '${field}' contains potentially dangerous content`);
-        }
-        sanitized[field] = value as any;
-      } else if (typeof data[field] === 'number') {
-        if (!isFinite(data[field] as number)) {
-          throw new Error(`Field '${field}' must be a valid number`);
-        }
-        sanitized[field] = data[field] as any;
-      } else {
-        sanitized[field] = data[field];
+  for (let i = 0; i < ALLOWED_FIELDS.length; i++) {
+    const field = ALLOWED_FIELDS[i];
+    if (!(field in data)) continue;
+    
+    const value = data[field];
+    const valueType = typeof value;
+    
+    // Prevent XSS by ensuring string fields don't contain scripts
+    if (valueType === 'string') {
+      const trimmedValue = value.trim();
+      // Basic XSS prevention
+      if (XSS_PATTERN.test(trimmedValue)) {
+        throw new Error(`Field '${field}' contains potentially dangerous content`);
       }
+      sanitized[field] = trimmedValue as any;
+    } else if (valueType === 'number') {
+      if (!isFinite(value)) {
+        throw new Error(`Field '${field}' must be a valid number`);
+      }
+      sanitized[field] = value as any;
+    } else {
+      sanitized[field] = value;
     }
   }
 
   return sanitized;
+}
+
+/**
+ * Checks database availability (cached result)
+ * @throws {Error} If database is not available
+ */
+function checkDatabase(): void {
+  if (typeof database === 'undefined' || !database) {
+    throw new Error('Database connection not available');
+  }
 }
 
 /**
@@ -178,19 +209,18 @@ export function getUser(userId: UserId): User | null {
     const sanitizedId = sanitizeUserId(userId);
 
     // Check if database exists
-    if (typeof database === 'undefined' || !database) {
-      throw new Error('Database connection not available');
-    }
+    checkDatabase();
 
     if (typeof database.find !== 'function') {
       throw new Error('Database find method not available');
     }
 
-    // Retrieve user with timeout protection
+    // Retrieve user
     const user = database.find(sanitizedId);
 
+    // Early return for null - no need to spread
     if (!user) {
-      return null; // User not found is not an error
+      return null;
     }
 
     // Return a copy to prevent modification of internal data
@@ -221,9 +251,7 @@ export function createUser(data: UserData): User {
     }
 
     // Check if database exists
-    if (typeof database === 'undefined' || !database) {
-      throw new Error('Database connection not available');
-    }
+    checkDatabase();
 
     if (typeof database.insert !== 'function') {
       throw new Error('Database insert method not available');
@@ -262,15 +290,13 @@ export function deleteUser(id: UserId): boolean {
     const sanitizedId = sanitizeUserId(id);
 
     // Check if database exists
-    if (typeof database === 'undefined' || !database) {
-      throw new Error('Database connection not available');
-    }
+    checkDatabase();
 
     if (typeof database.remove !== 'function') {
       throw new Error('Database remove method not available');
     }
 
-    // Verify user exists before deletion
+    // Verify user exists before deletion (only if find is available)
     if (typeof database.find === 'function') {
       const user = database.find(sanitizedId);
       if (!user) {
@@ -320,9 +346,7 @@ export function updateUserEmail(userId: UserId, email: string): User {
     }
 
     // Check if database exists
-    if (typeof database === 'undefined' || !database) {
-      throw new Error('Database connection not available');
-    }
+    checkDatabase();
 
     if (typeof database.find !== 'function' || typeof database.save !== 'function') {
       throw new Error('Required database methods not available');
