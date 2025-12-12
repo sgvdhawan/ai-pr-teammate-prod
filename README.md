@@ -5,7 +5,7 @@ An intelligent AI-powered GitHub PR assistant that automatically responds to cod
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)
 
-> **🆓 NEW:** Now supports **FREE AI providers** with real AI models! Use Groq (14,400 requests/day), Google Gemini, or Hugging Face - no credit card required! See [Free AI Setup Guide](./FREE_AI_SETUP.md).
+> **🏢 Enterprise Ready:** Now supports **AWS Bedrock** with Claude Sonnet 4! Perfect for organizations with AWS infrastructure. See [AWS Bedrock Setup Guide](./AWS_BEDROCK_SETUP.md).
 
 ## 🌟 Features
 
@@ -17,7 +17,7 @@ An intelligent AI-powered GitHub PR assistant that automatically responds to cod
 - **🔒 Security & Best Practices**: Applies error handling, validation, and security improvements
 - **🎨 Frontend Optimizations**: Adds loading states, error boundaries, and UX improvements
 - **🔄 Multi-file Support**: Can fix multiple files in a single commit
-- **🤝 Multiple AI Providers**: Supports Claude (Anthropic) and GPT-4 (OpenAI)
+- **🤝 Multiple AI Providers**: Supports AWS Bedrock (Claude Sonnet 4), Anthropic Claude, and OpenAI GPT
 
 ## 🎯 Problem It Solves
 
@@ -36,12 +36,10 @@ Development teams waste countless hours on:
 
 - Node.js 20+
 - A GitHub repository
-- An AI API key - **Choose one**:
-  - **🆓 Groq** (Recommended) - FREE: 14,400 requests/day, no credit card! → [Setup Guide](./FREE_AI_SETUP.md)
-  - **🆓 Google Gemini** - FREE: 1,500 requests/day → [Setup Guide](./FREE_AI_SETUP.md)
-  - **🆓 Hugging Face** - FREE: Rate limited → [Setup Guide](./FREE_AI_SETUP.md)
-  - 💳 Anthropic Claude - Paid (~$0.03/request)
-  - 💳 OpenAI GPT - Paid (~$0.001-0.01/request)
+- AI Provider Access - **Choose one**:
+  - **🏢 AWS Bedrock** (Recommended for Enterprise) - Claude Sonnet 4 via AWS → [Setup Guide](./AWS_BEDROCK_SETUP.md)
+  - 💳 Anthropic Claude - Direct API access (~$0.03/request)
+  - 💳 OpenAI GPT - Direct API access (~$0.001-0.01/request)
 
 ### Installation
 
@@ -54,44 +52,44 @@ Development teams waste countless hours on:
 - package.json
 ```
 
-2. **Get a FREE AI API key (Recommended: Groq):**
+2. **Set up AI Provider:**
 
-   **Option A: Groq (Best Free Option - Recommended)** 🆓
-   - Visit [https://console.groq.com/](https://console.groq.com/)
-   - Sign up (no credit card needed!)
-   - Get API key (starts with `gsk_...`)
-   - Free tier: 14,400 requests/day
+   **Option A: AWS Bedrock (Recommended for Enterprise)** 🏢
    
-   **Option B: Google Gemini** 🆓
-   - Visit [https://makersuite.google.com/app/apikey](https://makersuite.google.com/app/apikey)
-   - Get API key
-   - Free tier: 1,500 requests/day
+   If you have AWS Bedrock access, follow the [AWS Bedrock Setup Guide](./AWS_BEDROCK_SETUP.md).
    
-   **Option C: Paid providers** 💳
-   - Anthropic: [https://console.anthropic.com/](https://console.anthropic.com/) (~$0.03/request)
-   - OpenAI: [https://platform.openai.com/](https://platform.openai.com/) (~$0.001/request)
+   Quick summary:
+   - Create IAM user with Bedrock access
+   - Get AWS access keys
+   - Add to GitHub Secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
+   
+   **Option B: Direct API Providers** 💳
+   
+   - Anthropic: Get key from [https://console.anthropic.com/](https://console.anthropic.com/)
+   - OpenAI: Get key from [https://platform.openai.com/](https://platform.openai.com/)
 
-3. **Set up GitHub Secrets:**
+3. **Add credentials to GitHub Secrets:**
 
 Go to your repository **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
-Add your API key:
-
+For AWS Bedrock:
 ```
-# For Groq (FREE - Recommended):
-GROQ_API_KEY=gsk_your_key_here
+AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCY
+AWS_REGION=us-west-2
+BEDROCK_MODEL_ID=anthropic.claude-sonnet-4-5-20250929-v1:0
+```
 
-# OR for Gemini (FREE):
-GEMINI_API_KEY=your_gemini_key_here
-
-# OR for paid providers:
+OR for Direct APIs:
+```
 ANTHROPIC_API_KEY=sk-ant-xxxxx
+# OR
 OPENAI_API_KEY=sk-xxxxx
 ```
 
-4. **Create the GitHub Actions workflow:**
+4. **Create GitHub Actions workflow:**
 
-Create `.github/workflows/ai-pr-teammate.yml` with:
+Create `.github/workflows/ai-pr-teammate.yml`:
 
 ```yaml
 name: AI PR Teammate
@@ -127,12 +125,18 @@ jobs:
       - name: Run AI PR Teammate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Choose your AI provider:
-          AI_PROVIDER: 'groq'  # FREE! or 'gemini', 'anthropic', 'openai'
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}  # FREE
-          # GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # FREE
-          # ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # PAID
-          # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # PAID
+          # For AWS Bedrock:
+          AI_PROVIDER: 'bedrock'
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          BEDROCK_MODEL_ID: ${{ secrets.BEDROCK_MODEL_ID }}
+          # OR for Anthropic:
+          # AI_PROVIDER: 'anthropic'
+          # ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # OR for OpenAI:
+          # AI_PROVIDER: 'openai'
+          # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node src/index.js
 ```
 
@@ -140,11 +144,11 @@ jobs:
 
 ```bash
 git add .github/workflows/ai-pr-teammate.yml
-git commit -m "Add AI PR Teammate workflow with Groq (free)"
+git commit -m "Add AI PR Teammate workflow"
 git push
 ```
 
-That's it! 🎉 The AI PR Teammate is now active with **FREE, real AI**!
+That's it! 🎉 The AI PR Teammate is now active in your repository.
 
 ## 📖 Usage
 
@@ -283,25 +287,9 @@ Edit `.github/workflows/ai-pr-teammate.yml` to customize:
 
 ```yaml
 env:
-  # Choose AI provider:
-  AI_PROVIDER: 'groq'  # FREE: 'groq', 'gemini', 'huggingface'
-                       # PAID: 'anthropic', 'openai'
-  
-  # Add corresponding API key:
-  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+  AI_PROVIDER: 'anthropic'  # or 'openai'
+  # Add custom environment variables
 ```
-
-### AI Provider Comparison
-
-| Provider | Cost | Speed | Daily Limit | Setup |
-|----------|------|-------|-------------|-------|
-| **Groq** (Recommended) | 🆓 FREE | ⚡ Very Fast | 14,400 requests | [Guide](./FREE_AI_SETUP.md) |
-| **Gemini** | 🆓 FREE | ⚡ Fast | 1,500 requests | [Guide](./FREE_AI_SETUP.md) |
-| **Hugging Face** | 🆓 FREE | 🐌 Slower | Rate limited | [Guide](./FREE_AI_SETUP.md) |
-| Anthropic Claude | 💳 ~$0.03/req | Fast | Unlimited* | [Docs](https://docs.anthropic.com) |
-| OpenAI GPT-3.5 | 💳 ~$0.001/req | Fast | Unlimited* | [Docs](https://platform.openai.com/docs) |
-
-\* Subject to account balance and rate limits
 
 ### AI Trigger Patterns
 
@@ -442,11 +430,8 @@ MIT License - see LICENSE file for details
 ## 🙌 Acknowledgments
 
 Built with:
-- [Groq](https://groq.com) - FREE AI inference (Recommended!)
-- [Google Gemini](https://ai.google.dev/) - FREE AI provider
-- [Hugging Face](https://huggingface.co) - FREE open-source AI models
-- [Anthropic Claude](https://anthropic.com) - Premium AI provider
-- [OpenAI](https://openai.com) - AI provider
+- [Anthropic Claude](https://anthropic.com) - AI provider
+- [OpenAI GPT-4](https://openai.com) - AI provider
 - [GitHub Actions](https://github.com/features/actions) - Automation platform
 - [@actions/github](https://github.com/actions/toolkit) - GitHub API toolkit
 

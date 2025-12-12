@@ -1,16 +1,18 @@
 /**
  * AI Service
  * 
- * Handles LLM interactions with Claude or OpenAI
+ * Handles LLM interactions with Claude, OpenAI, or AWS Bedrock
  * Provides code analysis and fix generation
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 
 export class AIService {
   constructor() {
-    this.provider = process.env.AI_PROVIDER || 'groq'; // Default to free Groq
+    this.provider = process.env.AI_PROVIDER || 'bedrock';
     
     if (this.provider === 'anthropic') {
       this.client = new Anthropic({
@@ -22,21 +24,19 @@ export class AIService {
         apiKey: process.env.OPENAI_API_KEY
       });
       this.model = 'gpt-3.5-turbo';
-    } else if (this.provider === 'groq') {
-      // Groq: FREE tier with 14,400 requests/day! Real AI models
-      this.client = new OpenAI({
-        apiKey: process.env.GROQ_API_KEY || 'dummy', // Will be validated later
-        baseURL: 'https://api.groq.com/openai/v1'
+    } else if (this.provider === 'bedrock') {
+      // AWS Bedrock with Claude Sonnet 4
+      this.region = process.env.AWS_REGION || 'us-west-2';
+      this.bedrockClient = new BedrockRuntimeClient({ 
+        region: this.region,
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+        }
       });
-      this.model = 'llama-3.1-70b-versatile'; // Free, powerful model
-    } else if (this.provider === 'gemini') {
-      // Google Gemini: FREE tier with 15 requests/minute
-      this.geminiApiKey = process.env.GEMINI_API_KEY;
-      this.model = 'gemini-1.5-flash'; // Fast and free
-    } else if (this.provider === 'huggingface') {
-      // Hugging Face: FREE inference API
-      this.hfApiKey = process.env.HUGGINGFACE_API_KEY;
-      this.model = 'meta-llama/Meta-Llama-3-70B-Instruct'; // Free tier
+      // Use the model ID from your AWS Bedrock deployment
+      this.model = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-sonnet-4-5-20250929-v1:0';
+      this.inferenceProfile = process.env.BEDROCK_INFERENCE_PROFILE_ID || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
     }
     
     console.log(`🧠 AI Provider: ${this.provider} (Model: ${this.model})`);
@@ -184,7 +184,7 @@ ROOT_CAUSE:
    * Call the LLM with the prompt
    */
   async callLLM(prompt) {
-    console.log(`🚀 Using real AI API call: ${this.provider}`);
+    console.log(`🚀 Using ${this.provider} AI API call`);
     
     try {
       if (this.provider === 'anthropic') {
@@ -211,79 +211,47 @@ ROOT_CAUSE:
         
         return completion.choices[0].message.content;
         
-      } else if (this.provider === 'groq') {
-        // Groq uses OpenAI-compatible API (FREE tier!)
-        const completion = await this.client.chat.completions.create({
-          model: this.model,
+      } else if (this.provider === 'bedrock') {
+        // AWS Bedrock API call with Claude
+        const payload = {
+          anthropic_version: "bedrock-2023-05-31",
+          max_tokens: 8000,
           messages: [{
             role: 'user',
             content: prompt
           }],
-          max_tokens: 8000,
           temperature: 0.7
+        };
+        
+        const command = new InvokeModelCommand({
+          modelId: this.model,
+          contentType: "application/json",
+          accept: "application/json",
+          body: JSON.stringify(payload)
         });
         
-        return completion.choices[0].message.content;
+        console.log(`📡 Calling AWS Bedrock in region ${this.region}...`);
+        const response = await this.bedrockClient.send(command);
         
-      } else if (this.provider === 'gemini') {
-        // Google Gemini API
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.geminiApiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{ text: prompt }]
-              }],
-              generationConfig: {
-                maxOutputTokens: 8000,
-                temperature: 0.7
-              }
-            })
-          }
-        );
+        // Parse the response
+        const responseBody = JSON.parse(new TextDecoder().decode(response.body));
         
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(`Gemini API error: ${JSON.stringify(data)}`);
+        if (responseBody.content && responseBody.content.length > 0) {
+          return responseBody.content[0].text;
+        } else {
+          throw new Error('Invalid response format from Bedrock');
         }
-        
-        return data.candidates[0].content.parts[0].text;
-        
-      } else if (this.provider === 'huggingface') {
-        // Hugging Face Inference API
-        const response = await fetch(
-          `https://api-inference.huggingface.co/models/${this.model}`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${this.hfApiKey}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              inputs: prompt,
-              parameters: {
-                max_new_tokens: 4000,
-                temperature: 0.7,
-                return_full_text: false
-              }
-            })
-          }
-        );
-        
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(`Hugging Face API error: ${JSON.stringify(data)}`);
-        }
-        
-        return Array.isArray(data) ? data[0].generated_text : data.generated_text;
       }
       
       throw new Error(`Unsupported AI provider: ${this.provider}`);
       
     } catch (error) {
-      console.error('Error calling LLM:', error);
+      console.error(`Error calling ${this.provider} LLM:`, error);
+      if (error.name === 'ResourceNotFoundException') {
+        console.error('❌ Bedrock model not found. Check your model ID and region.');
+      } else if (error.name === 'AccessDeniedException') {
+        console.error('❌ Access denied to Bedrock. Check your AWS credentials and IAM permissions.');
+      }
       throw error;
     }
   }
