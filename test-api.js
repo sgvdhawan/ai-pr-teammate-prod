@@ -6,13 +6,47 @@
 const MAX_EMAIL_LENGTH = 254;
 const MAX_USER_DATA_SIZE = 10000; // Prevent DoS via large payloads
 
+// Type definitions
+interface User {
+  id?: string | number;
+  email?: string;
+  name?: string;
+  username?: string;
+  age?: number;
+  phone?: string;
+  address?: string;
+  [key: string]: any;
+}
+
+interface UserData {
+  email?: string;
+  name?: string;
+  username?: string;
+  age?: number;
+  phone?: string;
+  address?: string;
+  [key: string]: any;
+}
+
+interface Database {
+  find: (id: string | number) => User | null;
+  insert: (data: UserData) => User | null;
+  remove: (id: string | number) => boolean;
+  save: (user: User) => User | null;
+}
+
+// Declare global database (assuming it's injected)
+declare const database: Database;
+
+type UserId = string | number;
+
 /**
  * Sanitizes user ID to prevent injection attacks
- * @param {*} userId - The user ID to sanitize
- * @returns {string|number} Sanitized user ID
+ * @param userId - The user ID to sanitize
+ * @returns Sanitized user ID
  * @throws {Error} If userId is invalid
  */
-function sanitizeUserId(userId) {
+function sanitizeUserId(userId: any): string | number {
   if (userId === null || userId === undefined) {
     throw new Error('User ID cannot be null or undefined');
   }
@@ -45,10 +79,10 @@ function sanitizeUserId(userId) {
 
 /**
  * Validates email format with security in mind
- * @param {string} email - Email to validate
- * @returns {boolean} True if valid
+ * @param email - Email to validate
+ * @returns True if valid
  */
-function isValidEmail(email) {
+function isValidEmail(email: string): boolean {
   if (!email || typeof email !== 'string') {
     return false;
   }
@@ -79,11 +113,11 @@ function isValidEmail(email) {
 
 /**
  * Validates and sanitizes user data object
- * @param {Object} data - User data to validate
- * @returns {Object} Sanitized data
+ * @param data - User data to validate
+ * @returns Sanitized data
  * @throws {Error} If data is invalid
  */
-function validateUserData(data) {
+function validateUserData(data: any): UserData {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error('User data must be a valid object');
   }
@@ -105,24 +139,24 @@ function validateUserData(data) {
   }
 
   // Create sanitized copy (whitelist approach)
-  const sanitized = {};
-  const allowedFields = ['email', 'name', 'username', 'age', 'phone', 'address'];
+  const sanitized: UserData = {};
+  const allowedFields: (keyof UserData)[] = ['email', 'name', 'username', 'age', 'phone', 'address'];
   
   for (const field of allowedFields) {
     if (field in data) {
       // Prevent XSS by ensuring string fields don't contain scripts
       if (typeof data[field] === 'string') {
-        const value = data[field].trim();
+        const value = (data[field] as string).trim();
         // Basic XSS prevention
         if (/<script|javascript:|onerror=/i.test(value)) {
           throw new Error(`Field '${field}' contains potentially dangerous content`);
         }
-        sanitized[field] = value;
+        sanitized[field] = value as any;
       } else if (typeof data[field] === 'number') {
-        if (!isFinite(data[field])) {
+        if (!isFinite(data[field] as number)) {
           throw new Error(`Field '${field}' must be a valid number`);
         }
-        sanitized[field] = data[field];
+        sanitized[field] = data[field] as any;
       } else {
         sanitized[field] = data[field];
       }
@@ -134,11 +168,11 @@ function validateUserData(data) {
 
 /**
  * Retrieves a user by ID with proper error handling and security
- * @param {string|number} userId - The user ID to retrieve
- * @returns {Object|null} User object or null if not found
+ * @param userId - The user ID to retrieve
+ * @returns User object or null if not found
  * @throws {Error} If userId is invalid or database operation fails
  */
-export function getUser(userId) {
+export function getUser(userId: UserId): User | null {
   try {
     // Sanitize and validate input
     const sanitizedId = sanitizeUserId(userId);
@@ -163,7 +197,7 @@ export function getUser(userId) {
     return { ...user };
   } catch (error) {
     // Don't leak internal error details
-    if (error.message.includes('User ID')) {
+    if (error instanceof Error && error.message.includes('User ID')) {
       throw error; // Re-throw validation errors
     }
     throw new Error('Failed to retrieve user');
@@ -172,11 +206,11 @@ export function getUser(userId) {
 
 /**
  * Creates a new user with validated and sanitized data
- * @param {Object} data - User data to create
- * @returns {Object} Created user object
+ * @param data - User data to create
+ * @returns Created user object
  * @throws {Error} If data is invalid or creation fails
  */
-export function createUser(data) {
+export function createUser(data: UserData): User {
   try {
     // Validate and sanitize input data
     const sanitizedData = validateUserData(data);
@@ -206,9 +240,10 @@ export function createUser(data) {
     return { ...newUser };
   } catch (error) {
     // Re-throw validation errors with context
-    if (error.message.includes('User data') || 
-        error.message.includes('Email') ||
-        error.message.includes('Field')) {
+    if (error instanceof Error && 
+        (error.message.includes('User data') || 
+         error.message.includes('Email') ||
+         error.message.includes('Field'))) {
       throw error;
     }
     throw new Error('Failed to create user');
@@ -217,11 +252,11 @@ export function createUser(data) {
 
 /**
  * Deletes a user by ID with proper authorization checks
- * @param {string|number} id - The user ID to delete
- * @returns {boolean} True if deletion successful
+ * @param id - The user ID to delete
+ * @returns True if deletion successful
  * @throws {Error} If id is invalid or deletion fails
  */
-export function deleteUser(id) {
+export function deleteUser(id: UserId): boolean {
   try {
     // Sanitize and validate input
     const sanitizedId = sanitizeUserId(id);
@@ -253,8 +288,9 @@ export function deleteUser(id) {
 
     return true;
   } catch (error) {
-    if (error.message.includes('User ID') || 
-        error.message.includes('User not found')) {
+    if (error instanceof Error && 
+        (error.message.includes('User ID') || 
+         error.message.includes('User not found'))) {
       throw error;
     }
     throw new Error('Failed to delete user');
@@ -263,12 +299,12 @@ export function deleteUser(id) {
 
 /**
  * Updates a user's email with validation and security checks
- * @param {string|number} userId - The user ID to update
- * @param {string} email - The new email address
- * @returns {Object} Updated user object
+ * @param userId - The user ID to update
+ * @param email - The new email address
+ * @returns Updated user object
  * @throws {Error} If inputs are invalid or update fails
  */
-export function updateUserEmail(userId, email) {
+export function updateUserEmail(userId: UserId, email: string): User {
   try {
     // Sanitize and validate user ID
     const sanitizedId = sanitizeUserId(userId);
@@ -300,7 +336,7 @@ export function updateUserEmail(userId, email) {
     }
 
     // Create updated user object (prevent mutation of original)
-    const updatedUser = { ...user, email: trimmedEmail };
+    const updatedUser: User = { ...user, email: trimmedEmail };
 
     // Save updated user
     const savedUser = database.save(updatedUser);
@@ -312,9 +348,10 @@ export function updateUserEmail(userId, email) {
     // Return a copy
     return { ...savedUser };
   } catch (error) {
-    if (error.message.includes('User ID') || 
-        error.message.includes('Email') ||
-        error.message.includes('User not found')) {
+    if (error instanceof Error && 
+        (error.message.includes('User ID') || 
+         error.message.includes('Email') ||
+         error.message.includes('User not found'))) {
       throw error;
     }
     throw new Error('Failed to update user email');
