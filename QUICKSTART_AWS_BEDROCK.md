@@ -11,9 +11,44 @@ From your AWS account email, you should have:
 - ✅ Budget: $100/month
 - ✅ Valid until: January 07, 2026
 
-## 🚀 5-Minute Setup
+## 🚀 5-Minute Setup (Choose Your Method)
 
-### Step 1: Get AWS Access Keys (2 minutes)
+### 🎯 Method A: Using API Key from Secrets Manager (RECOMMENDED - Simpler!)
+
+**This matches what your email describes!**
+
+#### Step 1: Get the API Key from AWS Secrets Manager (2 minutes)
+
+1. Go to [AWS Secrets Manager Console](https://console.aws.amazon.com/secretsmanager/)
+2. Find the secret: `bedrock/AWS3988/Sandbox/api-key`
+3. Click on it → "Retrieve secret value"
+4. Copy the secret value (this is your Bedrock API key)
+
+**Or using AWS CLI:**
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id bedrock/AWS3988/Sandbox/api-key \
+  --region us-west-2 \
+  --query SecretString \
+  --output text
+```
+
+#### Step 2: Add GitHub Secret (1 minute)
+
+1. Go to your repo: `Settings` → `Secrets and variables` → `Actions`
+2. Click `New repository secret`:
+   - Name: `BEDROCK_API_KEY`
+   - Value: (paste the API key from Step 1)
+
+That's it! Only ONE secret needed! ✅
+
+---
+
+### 🔧 Method B: Using IAM Credentials (Alternative)
+
+If you prefer the traditional AWS SDK approach:
+
+#### Step 1: Get AWS Access Keys (2 minutes)
 
 1. Go to [AWS IAM Console](https://console.aws.amazon.com/iam/)
 2. Click "Users" → Your username → "Security credentials"
@@ -24,7 +59,7 @@ From your AWS account email, you should have:
    AWS_SECRET_ACCESS_KEY=...
    ```
 
-### Step 2: Add GitHub Secrets (1 minute)
+#### Step 2: Add GitHub Secrets (1 minute)
 
 1. Go to your repo: `Settings` → `Secrets and variables` → `Actions`
 2. Click `New repository secret` for each:

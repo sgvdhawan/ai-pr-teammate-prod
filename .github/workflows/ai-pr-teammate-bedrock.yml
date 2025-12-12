@@ -47,12 +47,17 @@ jobs:
           AI_PROVIDER: 'bedrock'
           
           # AWS Bedrock Configuration
-          # Add these secrets in: Settings → Secrets and variables → Actions
+          # METHOD A (Recommended): Use API key from Secrets Manager
+          # Just add BEDROCK_API_KEY secret, that's it!
+          BEDROCK_API_KEY: ${{ secrets.BEDROCK_API_KEY }}
+          
+          # METHOD B (Alternative): Use IAM credentials
+          # If you don't have BEDROCK_API_KEY, add these instead:
           AWS_REGION: ${{ secrets.AWS_REGION || 'us-west-2' }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           
-          # Bedrock Model Configuration (from your deployment)
+          # Bedrock Model Configuration (from your deployment email)
           BEDROCK_MODEL_ID: 'anthropic.claude-sonnet-4-5-20250929-v1:0'
           BEDROCK_INFERENCE_PROFILE_ID: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0'
           BEDROCK_ENDPOINT_URL: 'https://bedrock-runtime.us-west-2.amazonaws.com/'
