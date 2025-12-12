@@ -5,7 +5,7 @@ An intelligent AI-powered GitHub PR assistant that automatically responds to cod
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)
 
-> **💡 Note:** This tool uses paid AI APIs (Anthropic/OpenAI). Enable **Demo Mode** for free testing and demonstrations without API costs! See [API Costs & Demo Mode](#-api-costs--demo-mode) section.
+> **🆓 NEW:** Now supports **FREE AI providers** with real AI models! Use Groq (14,400 requests/day), Google Gemini, or Hugging Face - no credit card required! See [Free AI Setup Guide](./FREE_AI_SETUP.md).
 
 ## 🌟 Features
 
@@ -36,7 +36,12 @@ Development teams waste countless hours on:
 
 - Node.js 20+
 - A GitHub repository
-- An API key from Anthropic (Claude) or OpenAI (GPT-4) **⚠️ Paid service required**
+- An AI API key - **Choose one**:
+  - **🆓 Groq** (Recommended) - FREE: 14,400 requests/day, no credit card! → [Setup Guide](./FREE_AI_SETUP.md)
+  - **🆓 Google Gemini** - FREE: 1,500 requests/day → [Setup Guide](./FREE_AI_SETUP.md)
+  - **🆓 Hugging Face** - FREE: Rate limited → [Setup Guide](./FREE_AI_SETUP.md)
+  - 💳 Anthropic Claude - Paid (~$0.03/request)
+  - 💳 OpenAI GPT - Paid (~$0.001-0.01/request)
 
 ### Installation
 
@@ -49,94 +54,97 @@ Development teams waste countless hours on:
 - package.json
 ```
 
-2. **Set up GitHub Secrets:**
+2. **Get a FREE AI API key (Recommended: Groq):**
+
+   **Option A: Groq (Best Free Option - Recommended)** 🆓
+   - Visit [https://console.groq.com/](https://console.groq.com/)
+   - Sign up (no credit card needed!)
+   - Get API key (starts with `gsk_...`)
+   - Free tier: 14,400 requests/day
+   
+   **Option B: Google Gemini** 🆓
+   - Visit [https://makersuite.google.com/app/apikey](https://makersuite.google.com/app/apikey)
+   - Get API key
+   - Free tier: 1,500 requests/day
+   
+   **Option C: Paid providers** 💳
+   - Anthropic: [https://console.anthropic.com/](https://console.anthropic.com/) (~$0.03/request)
+   - OpenAI: [https://platform.openai.com/](https://platform.openai.com/) (~$0.001/request)
+
+3. **Set up GitHub Secrets:**
 
 Go to your repository **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
-Add the following secrets:
+Add your API key:
 
 ```
+# For Groq (FREE - Recommended):
+GROQ_API_KEY=gsk_your_key_here
+
+# OR for Gemini (FREE):
+GEMINI_API_KEY=your_gemini_key_here
+
+# OR for paid providers:
 ANTHROPIC_API_KEY=sk-ant-xxxxx
-# OR
 OPENAI_API_KEY=sk-xxxxx
 ```
 
-3. **Configure AI Provider (Optional):**
+4. **Create the GitHub Actions workflow:**
 
-Go to **Settings** → **Secrets and variables** → **Variables** → **New repository variable**
+Create `.github/workflows/ai-pr-teammate.yml` with:
 
+```yaml
+name: AI PR Teammate
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  check_run:
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  ai-pr-teammate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - run: npm install
+      
+      - name: Run AI PR Teammate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Choose your AI provider:
+          AI_PROVIDER: 'groq'  # FREE! or 'gemini', 'anthropic', 'openai'
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}  # FREE
+          # GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # FREE
+          # ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # PAID
+          # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # PAID
+        run: node src/index.js
 ```
-AI_PROVIDER=anthropic  # or 'openai'
-```
 
-4. **Commit and push the workflow:**
+5. **Commit and push:**
 
 ```bash
 git add .github/workflows/ai-pr-teammate.yml
-git commit -m "Add AI PR Teammate workflow"
+git commit -m "Add AI PR Teammate workflow with Groq (free)"
 git push
 ```
 
-That's it! 🎉 The AI PR Teammate is now active in your repository.
-
-## 💰 API Costs & Demo Mode
-
-### ⚠️ Important: API Costs
-
-This tool uses paid AI APIs. Each code fix or CI analysis request makes an API call:
-
-**Anthropic Claude (Recommended):**
-- Model: `claude-3-5-sonnet-20241022`
-- Cost: ~$3 per million input tokens, ~$15 per million output tokens
-- Typical request: $0.01-0.05 per code fix (depending on file size)
-- [Anthropic Pricing](https://www.anthropic.com/pricing)
-
-**OpenAI GPT-3.5:**
-- Model: `gpt-3.5-turbo`
-- Cost: ~$0.50 per million input tokens, ~$1.50 per million output tokens
-- Typical request: $0.001-0.01 per code fix
-- [OpenAI Pricing](https://openai.com/pricing)
-
-**Cost Estimates:**
-- Small team (10-20 fixes/day): $5-20/month
-- Medium team (50-100 fixes/day): $20-100/month
-- Large team (200+ fixes/day): $100-500/month
-
-### 🎭 Demo Mode (FREE - No API Costs!)
-
-For demonstrations, testing, or to avoid API costs, enable **Demo Mode**:
-
-```yaml
-# In .github/workflows/ai-pr-teammate.yml
-env:
-  DEMO_MODE: 'true'  # Uses mock AI responses - NO API CALLS!
-  AI_PROVIDER: 'anthropic'
-```
-
-**Demo Mode Features:**
-- ✅ No API calls or costs
-- ✅ Instant responses (no network latency)
-- ✅ Realistic mock code fixes with error handling
-- ✅ Perfect for demos, testing, and development
-- ✅ Shows how the tool works without spending credits
-- ⚠️ Generated fixes are template-based, not contextually perfect
-
-**When to Use Demo Mode:**
-- Hackathon presentations and demos
-- Testing the workflow setup
-- Development and debugging
-- When you want to see the tool in action without costs
-- Training team members on how to use the tool
-
-**When to Use Production Mode:**
-- Real code reviews that need intelligent fixes
-- CI failures that require contextual understanding
-- Production repositories with paying customers
-- When code quality and accuracy matter most
-
-**📚 Detailed Guides:**
-- 🎭 [Demo Mode Setup Guide](./DEMO_MODE_SETUP.md) - Free setup without API costs
-- 💰 [Cost Management Guide](./COST_MANAGEMENT.md) - Complete pricing and optimization strategies
+That's it! 🎉 The AI PR Teammate is now active with **FREE, real AI**!
 
 ## 📖 Usage
 
@@ -275,9 +283,25 @@ Edit `.github/workflows/ai-pr-teammate.yml` to customize:
 
 ```yaml
 env:
-  AI_PROVIDER: 'anthropic'  # or 'openai'
-  # Add custom environment variables
+  # Choose AI provider:
+  AI_PROVIDER: 'groq'  # FREE: 'groq', 'gemini', 'huggingface'
+                       # PAID: 'anthropic', 'openai'
+  
+  # Add corresponding API key:
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 ```
+
+### AI Provider Comparison
+
+| Provider | Cost | Speed | Daily Limit | Setup |
+|----------|------|-------|-------------|-------|
+| **Groq** (Recommended) | 🆓 FREE | ⚡ Very Fast | 14,400 requests | [Guide](./FREE_AI_SETUP.md) |
+| **Gemini** | 🆓 FREE | ⚡ Fast | 1,500 requests | [Guide](./FREE_AI_SETUP.md) |
+| **Hugging Face** | 🆓 FREE | 🐌 Slower | Rate limited | [Guide](./FREE_AI_SETUP.md) |
+| Anthropic Claude | 💳 ~$0.03/req | Fast | Unlimited* | [Docs](https://docs.anthropic.com) |
+| OpenAI GPT-3.5 | 💳 ~$0.001/req | Fast | Unlimited* | [Docs](https://platform.openai.com/docs) |
+
+\* Subject to account balance and rate limits
 
 ### AI Trigger Patterns
 
@@ -394,7 +418,7 @@ Contributions are welcome! Here are some ideas:
 
 ### AI not responding?
 
-1. Check that secrets are set correctly (or enable `DEMO_MODE: 'true'` for testing)
+1. Check that secrets are set correctly
 2. Verify the trigger pattern matches (`@ai-teammate`)
 3. Check GitHub Actions logs
 4. Ensure the PR is from a branch in the same repo (not a fork)
@@ -405,36 +429,11 @@ Contributions are welcome! Here are some ideas:
 2. Verify the workflow has `checks: read` permission
 3. Review the CI logs for error patterns
 
-### Getting API errors?
-
-1. Verify your API key is valid
-2. Check you haven't exceeded rate limits
-3. Ensure you have credits/balance in your API account
-4. **Or switch to Demo Mode**: Set `DEMO_MODE: 'true'` to bypass API calls entirely
-
 ### API Rate Limits?
 
 - Use Claude (higher rate limits than OpenAI for most tiers)
 - Add rate limit handling
 - Consider caching responses
-
-### Managing API Costs?
-
-**Enable Demo Mode for testing:**
-```yaml
-env:
-  DEMO_MODE: 'true'
-```
-
-**Cost Optimization Tips:**
-1. Use Demo Mode for demonstrations and testing
-2. Set up branch protection to limit which PRs trigger the bot
-3. Use specific trigger patterns (only respond when tagged with `@ai-teammate`)
-4. Monitor your API usage in Anthropic/OpenAI dashboard
-5. Set spending limits in your API provider account
-6. Consider GPT-3.5-turbo for lower costs (vs GPT-4 or Claude)
-7. Review and approve AI changes before merging to learn patterns
-8. Use for high-value fixes, not trivial formatting changes
 
 ## 📝 License
 
@@ -443,8 +442,11 @@ MIT License - see LICENSE file for details
 ## 🙌 Acknowledgments
 
 Built with:
-- [Anthropic Claude](https://anthropic.com) - AI provider
-- [OpenAI GPT-4](https://openai.com) - AI provider
+- [Groq](https://groq.com) - FREE AI inference (Recommended!)
+- [Google Gemini](https://ai.google.dev/) - FREE AI provider
+- [Hugging Face](https://huggingface.co) - FREE open-source AI models
+- [Anthropic Claude](https://anthropic.com) - Premium AI provider
+- [OpenAI](https://openai.com) - AI provider
 - [GitHub Actions](https://github.com/features/actions) - Automation platform
 - [@actions/github](https://github.com/actions/toolkit) - GitHub API toolkit
 

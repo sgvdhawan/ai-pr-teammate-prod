@@ -10,7 +10,7 @@ import OpenAI from 'openai';
 
 export class AIService {
   constructor() {
-    this.provider = process.env.AI_PROVIDER || 'anthropic';
+    this.provider = process.env.AI_PROVIDER || 'groq'; // Default to free Groq
     
     if (this.provider === 'anthropic') {
       this.client = new Anthropic({
@@ -21,10 +21,25 @@ export class AIService {
       this.client = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY
       });
-      this.model = 'gpt-3.5-turbo'; // Works for all OpenAI accounts
+      this.model = 'gpt-3.5-turbo';
+    } else if (this.provider === 'groq') {
+      // Groq: FREE tier with 14,400 requests/day! Real AI models
+      this.client = new OpenAI({
+        apiKey: process.env.GROQ_API_KEY || 'dummy', // Will be validated later
+        baseURL: 'https://api.groq.com/openai/v1'
+      });
+      this.model = 'llama-3.1-70b-versatile'; // Free, powerful model
+    } else if (this.provider === 'gemini') {
+      // Google Gemini: FREE tier with 15 requests/minute
+      this.geminiApiKey = process.env.GEMINI_API_KEY;
+      this.model = 'gemini-1.5-flash'; // Fast and free
+    } else if (this.provider === 'huggingface') {
+      // Hugging Face: FREE inference API
+      this.hfApiKey = process.env.HUGGINGFACE_API_KEY;
+      this.model = 'meta-llama/Meta-Llama-3-70B-Instruct'; // Free tier
     }
     
-    console.log(`🧠 AI Provider: ${this.provider}`);
+    console.log(`🧠 AI Provider: ${this.provider} (Model: ${this.model})`);
   }
   
   /**
@@ -169,15 +184,7 @@ ROOT_CAUSE:
    * Call the LLM with the prompt
    */
   async callLLM(prompt) {
-    // PRODUCTION MODE: Use real API calls
-    const USE_MOCK_RESPONSE = process.env.DEMO_MODE === 'true' || false; // Set to true for demo mode
-    
-    if (USE_MOCK_RESPONSE) {
-      console.log('🎭 Using mock AI response (DEMO MODE)');
-      return this.getMockResponse(prompt);
-    }
-    
-    console.log('🚀 Using real AI API call (PRODUCTION MODE)');
+    console.log(`🚀 Using real AI API call: ${this.provider}`);
     
     try {
       if (this.provider === 'anthropic') {
@@ -191,6 +198,7 @@ ROOT_CAUSE:
         });
         
         return message.content[0].text;
+        
       } else if (this.provider === 'openai') {
         const completion = await this.client.chat.completions.create({
           model: this.model,
@@ -202,7 +210,78 @@ ROOT_CAUSE:
         });
         
         return completion.choices[0].message.content;
+        
+      } else if (this.provider === 'groq') {
+        // Groq uses OpenAI-compatible API (FREE tier!)
+        const completion = await this.client.chat.completions.create({
+          model: this.model,
+          messages: [{
+            role: 'user',
+            content: prompt
+          }],
+          max_tokens: 8000,
+          temperature: 0.7
+        });
+        
+        return completion.choices[0].message.content;
+        
+      } else if (this.provider === 'gemini') {
+        // Google Gemini API
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{ text: prompt }]
+              }],
+              generationConfig: {
+                maxOutputTokens: 8000,
+                temperature: 0.7
+              }
+            })
+          }
+        );
+        
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(`Gemini API error: ${JSON.stringify(data)}`);
+        }
+        
+        return data.candidates[0].content.parts[0].text;
+        
+      } else if (this.provider === 'huggingface') {
+        // Hugging Face Inference API
+        const response = await fetch(
+          `https://api-inference.huggingface.co/models/${this.model}`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${this.hfApiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              inputs: prompt,
+              parameters: {
+                max_new_tokens: 4000,
+                temperature: 0.7,
+                return_full_text: false
+              }
+            })
+          }
+        );
+        
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(`Hugging Face API error: ${JSON.stringify(data)}`);
+        }
+        
+        return Array.isArray(data) ? data[0].generated_text : data.generated_text;
       }
+      
+      throw new Error(`Unsupported AI provider: ${this.provider}`);
+      
     } catch (error) {
       console.error('Error calling LLM:', error);
       throw error;
