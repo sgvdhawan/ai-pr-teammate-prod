@@ -25,35 +25,37 @@ export class AIService {
       });
       this.model = 'gpt-3.5-turbo';
     } else if (this.provider === 'bedrock') {
-      // AWS Bedrock with Claude Sonnet 4
+      // AWS Bedrock with Claude Sonnet 4  
       this.region = process.env.AWS_REGION || 'us-west-2';
-      this.endpointUrl = process.env.BEDROCK_ENDPOINT_URL || 'https://bedrock-runtime.us-west-2.amazonaws.com/';
+      this.endpointUrl = `https://bedrock-runtime.${this.region}.amazonaws.com`;
       
-      // Support two authentication methods:
-      // Method 1: Direct API key from Secrets Manager (simpler - from your email)
-      // Method 2: IAM credentials (standard AWS SDK approach)
-      
+      // Check if BEDROCK_API_KEY is provided (Adobe CAMP - just the api_key value)
       if (process.env.BEDROCK_API_KEY) {
-        // Method 1: Using API key directly (from AWS Secrets Manager)
-        console.log('🔑 Using Bedrock API key from Secrets Manager');
+        console.log('🔑 Using Adobe CAMP Bedrock API key');
         this.bedrockApiKey = process.env.BEDROCK_API_KEY;
-        this.useDirectApiKey = true;
+        this.useCampAuth = true;
       } else {
-        // Method 2: Using IAM credentials with AWS SDK
-        console.log('🔐 Using IAM credentials for Bedrock');
-        this.bedrockClient = new BedrockRuntimeClient({ 
-          region: this.region,
-          endpoint: this.endpointUrl,
-          credentials: {
-            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-          }
-        });
-        this.useDirectApiKey = false;
+        // Try standard AWS credentials
+        const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+        const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+        
+        if (accessKeyId && secretAccessKey) {
+          console.log('🔐 Using standard AWS IAM credentials for Bedrock');
+          this.bedrockClient = new BedrockRuntimeClient({ 
+            region: this.region,
+            credentials: {
+              accessKeyId: accessKeyId,
+              secretAccessKey: secretAccessKey
+            }
+          });
+          this.useCampAuth = false;
+        } else {
+          throw new Error('AWS Bedrock requires either BEDROCK_API_KEY or (AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY). Please set these in GitHub Secrets.');
+        }
       }
       
       // Use the model ID from your AWS Bedrock deployment
-      this.model = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-sonnet-4-5-20250929-v1:0';
+      this.model = process.env.BEDROCK_MODEL_ID || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
       this.inferenceProfile = process.env.BEDROCK_INFERENCE_PROFILE_ID || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
     }
     
@@ -231,47 +233,70 @@ ROOT_CAUSE:
         
       } else if (this.provider === 'bedrock') {
         // AWS Bedrock API call with Claude
-        const payload = {
-          anthropic_version: "bedrock-2023-05-31",
-          max_tokens: 8000,
-          messages: [{
-            role: 'user',
-            content: prompt
-          }],
-          temperature: 0.7
-        };
         
-        if (this.useDirectApiKey) {
-          // Method 1: Direct API call with API key (as described in your email)
-          console.log(`📡 Calling AWS Bedrock with API key at ${this.endpointUrl}...`);
+        if (this.useCampAuth) {
+          // Using Adobe CAMP Bedrock API key with /converse endpoint
+          console.log(`📡 Calling AWS Bedrock with CAMP API key...`);
+          console.log(`   Endpoint: ${this.endpointUrl}/model/${this.model}/converse`);
           
-          const response = await fetch(`${this.endpointUrl}model/${this.model}/invoke`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': `Bearer ${this.bedrockApiKey}`,
-              'x-amz-bedrock-model-id': this.model
-            },
-            body: JSON.stringify(payload)
-          });
+          // Use the converse endpoint as shown in the curl example
+          const payload = {
+            messages: [{
+              role: 'user',
+              content: [{ text: prompt }]
+            }]
+          };
+          
+          const response = await fetch(
+            `${this.endpointUrl}/model/${this.model}/converse`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.bedrockApiKey}`
+              },
+              body: JSON.stringify(payload)
+            }
+          );
           
           if (!response.ok) {
             const errorText = await response.text();
+            console.error('❌ Bedrock API error:', response.status, errorText);
             throw new Error(`Bedrock API error: ${response.status} - ${errorText}`);
           }
           
-          const responseBody = await response.json();
+          const responseData = await response.json();
+          console.log('✅ Received response from Bedrock');
           
-          if (responseBody.content && responseBody.content.length > 0) {
-            return responseBody.content[0].text;
-          } else {
-            throw new Error('Invalid response format from Bedrock');
+          // Extract the text from the converse response format
+          if (responseData.output && responseData.output.message && responseData.output.message.content) {
+            const textContent = responseData.output.message.content.find(c => c.text);
+            if (textContent) {
+              return textContent.text;
+            }
           }
           
+          // Fallback: try to find text in response
+          if (responseData.content && responseData.content[0] && responseData.content[0].text) {
+            return responseData.content[0].text;
+          }
+          
+          console.error('Unexpected response format:', JSON.stringify(responseData));
+          throw new Error('Invalid response format from Bedrock');
+          
         } else {
-          // Method 2: Using AWS SDK with IAM credentials
+          // Using standard AWS SDK with IAM credentials
           console.log(`📡 Calling AWS Bedrock with IAM credentials in region ${this.region}...`);
+          
+          const payload = {
+            anthropic_version: "bedrock-2023-05-31",
+            max_tokens: 8000,
+            messages: [{
+              role: 'user',
+              content: prompt
+            }],
+            temperature: 0.7
+          };
           
           const command = new InvokeModelCommand({
             modelId: this.model,
