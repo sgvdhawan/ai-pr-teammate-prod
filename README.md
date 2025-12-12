@@ -392,4 +392,3 @@ For your hackathon demo:
 **Made with ❤️ for developers who want to ship faster**
 
 *Questions? Open an issue or contact the team!*
-
