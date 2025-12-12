@@ -13,6 +13,7 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 export class AIService {
   constructor() {
     this.provider = process.env.AI_PROVIDER || 'bedrock';
+    console.log(`🔍 Initializing AI Service with provider: ${this.provider}`);
     
     if (this.provider === 'anthropic') {
       this.client = new Anthropic({
@@ -30,9 +31,12 @@ export class AIService {
       this.endpointUrl = `https://bedrock-runtime.${this.region}.amazonaws.com`;
       
       // Check if BEDROCK_API_KEY is provided (Adobe CAMP - just the api_key value)
-      if (process.env.BEDROCK_API_KEY) {
+      const apiKey = process.env.BEDROCK_API_KEY;
+      console.log(`🔍 BEDROCK_API_KEY present: ${!!apiKey}, length: ${apiKey ? apiKey.length : 0}`);
+      
+      if (apiKey && apiKey.trim().length > 0) {
         console.log('🔑 Using Adobe CAMP Bedrock API key');
-        this.bedrockApiKey = process.env.BEDROCK_API_KEY;
+        this.bedrockApiKey = apiKey.trim();
         this.useCampAuth = true;
       } else {
         // Try standard AWS credentials
@@ -208,6 +212,9 @@ ROOT_CAUSE:
     
     try {
       if (this.provider === 'anthropic') {
+        if (!this.client) {
+          throw new Error('Anthropic client not initialized');
+        }
         const message = await this.client.messages.create({
           model: this.model,
           max_tokens: 8000,
@@ -238,6 +245,11 @@ ROOT_CAUSE:
           // Using Adobe CAMP Bedrock API key with /converse endpoint
           console.log(`📡 Calling AWS Bedrock with CAMP API key...`);
           console.log(`   Endpoint: ${this.endpointUrl}/model/${this.model}/converse`);
+          console.log(`   API Key length: ${this.bedrockApiKey ? this.bedrockApiKey.length : 0}`);
+          
+          if (!this.bedrockApiKey) {
+            throw new Error('BEDROCK_API_KEY is not set or is empty');
+          }
           
           // Use the converse endpoint as shown in the curl example
           const payload = {
@@ -247,6 +259,7 @@ ROOT_CAUSE:
             }]
           };
           
+          console.log(`📤 Sending request to Bedrock...`);
           const response = await fetch(
             `${this.endpointUrl}/model/${this.model}/converse`,
             {
@@ -259,6 +272,8 @@ ROOT_CAUSE:
             }
           );
           
+          console.log(`📥 Response status: ${response.status}`);
+          
           if (!response.ok) {
             const errorText = await response.text();
             console.error('❌ Bedrock API error:', response.status, errorText);
@@ -267,11 +282,13 @@ ROOT_CAUSE:
           
           const responseData = await response.json();
           console.log('✅ Received response from Bedrock');
+          console.log(`   Response keys: ${Object.keys(responseData).join(', ')}`);
           
           // Extract the text from the converse response format
           if (responseData.output && responseData.output.message && responseData.output.message.content) {
             const textContent = responseData.output.message.content.find(c => c.text);
             if (textContent) {
+              console.log(`✅ Extracted text response (length: ${textContent.text.length})`);
               return textContent.text;
             }
           }
@@ -281,7 +298,7 @@ ROOT_CAUSE:
             return responseData.content[0].text;
           }
           
-          console.error('Unexpected response format:', JSON.stringify(responseData));
+          console.error('Unexpected response format:', JSON.stringify(responseData).substring(0, 500));
           throw new Error('Invalid response format from Bedrock');
           
         } else {

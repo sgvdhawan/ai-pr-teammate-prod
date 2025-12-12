@@ -45,7 +45,15 @@ jobs:
       - name: Run AI PR Teammate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'anthropic' }}
+          
+          # Use AWS Bedrock (Adobe CAMP)
+          AI_PROVIDER: 'bedrock'
+          BEDROCK_API_KEY: ${{ secrets.BEDROCK_API_KEY }}
+          AWS_REGION: 'us-west-2'
+          BEDROCK_MODEL_ID: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0'
+          
+          # Alternative: Direct Anthropic/OpenAI (not used)
+          # ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # AI_PROVIDER: ${{ vars.AI_PROVIDER || 'anthropic' }}
         run: node src/index.js
