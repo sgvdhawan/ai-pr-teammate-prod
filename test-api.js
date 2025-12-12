@@ -1,200 +1,261 @@
 /**
- * User API - with comprehensive error handling
+ * Utility functions - with comprehensive error handling
  */
 
 /**
- * Retrieves a user by ID
- * @param {string|number} userId - The user ID to find
- * @returns {Object} The user object
- * @throws {Error} If userId is invalid or user not found
+ * Safely parses a JSON string
+ * @param {string} jsonString - The JSON string to parse
+ * @returns {*} The parsed JSON object
+ * @throws {Error} If jsonString is invalid or parsing fails
  */
-export function getUser(userId) {
+export function parseJSON(jsonString) {
   // Input validation
-  if (!userId) {
-    throw new Error('User ID is required');
+  if (jsonString === null || jsonString === undefined) {
+    throw new Error('JSON string cannot be null or undefined');
   }
 
-  if (typeof userId !== 'string' && typeof userId !== 'number') {
-    throw new Error('User ID must be a string or number');
+  if (typeof jsonString !== 'string') {
+    throw new Error('Input must be a string');
+  }
+
+  if (jsonString.trim().length === 0) {
+    throw new Error('JSON string cannot be empty');
   }
 
   try {
-    const user = database.find(userId);
+    const parsed = JSON.parse(jsonString);
+    return parsed;
+  } catch (error) {
+    // Provide more context about the parsing error
+    throw new Error(`Failed to parse JSON: ${error.message}`);
+  }
+}
+
+/**
+ * Fetches data from a URL and parses the JSON response
+ * @param {string} url - The URL to fetch data from
+ * @returns {Promise<*>} Promise resolving to the parsed JSON data
+ * @throws {Error} If url is invalid or fetch fails
+ */
+export async function fetchData(url) {
+  // Input validation
+  if (!url || typeof url !== 'string') {
+    throw new Error('URL must be a valid string');
+  }
+
+  if (url.trim().length === 0) {
+    throw new Error('URL cannot be empty');
+  }
+
+  // Basic URL validation
+  try {
+    new URL(url);
+  } catch (error) {
+    throw new Error('Invalid URL format');
+  }
+
+  try {
+    const response = await fetch(url);
     
-    if (!user) {
-      throw new Error(`User with ID ${userId} not found`);
+    // Check if the response was successful
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status} - ${response.statusText}`);
+    }
+
+    // Check if response has content
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('Response is not JSON format');
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    // Handle network errors
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Network error: Failed to fetch data. Please check your connection.');
     }
     
-    return user;
-  } catch (error) {
-    // Re-throw with context if it's our custom error
-    if (error.message.includes('User')) {
+    // Handle JSON parsing errors from response.json()
+    if (error.name === 'SyntaxError') {
+      throw new Error('Failed to parse response as JSON');
+    }
+
+    // Re-throw if it's already our custom error
+    if (error.message.includes('HTTP error') || 
+        error.message.includes('Network error') || 
+        error.message.includes('Response is not JSON')) {
       throw error;
     }
-    // Wrap database errors with more context
-    throw new Error(`Failed to retrieve user: ${error.message}`);
+
+    throw new Error(`Failed to fetch data: ${error.message}`);
   }
 }
 
 /**
- * Creates a new user
- * @param {Object} data - User data object
- * @returns {Object} The created user object
- * @throws {Error} If data is invalid or creation fails
+ * Calculates the total price for an array of items
+ * @param {Array<Object>} items - Array of items with price and quantity properties
+ * @returns {number} The total calculated price
+ * @throws {Error} If items is invalid or calculation fails
  */
-export function createUser(data) {
+export function calculateTotal(items) {
   // Input validation
-  if (!data || typeof data !== 'object') {
-    throw new Error('User data must be a valid object');
+  if (!items) {
+    throw new Error('Items array is required');
   }
 
-  if (Array.isArray(data)) {
-    throw new Error('User data cannot be an array');
+  if (!Array.isArray(items)) {
+    throw new Error('Items must be an array');
   }
 
-  // Validate required fields
-  const requiredFields = ['email', 'name'];
-  const missingFields = requiredFields.filter(field => !data[field]);
-  
-  if (missingFields.length > 0) {
-    throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+  if (items.length === 0) {
+    return 0; // Return 0 for empty array (not an error condition)
   }
-
-  // Basic email validation
-  if (!data.email.includes('@') || data.email.length < 3) {
-    throw new Error('Invalid email format');
-  }
-
-  // Sanitize data to prevent injection attacks
-  const sanitizedData = {
-    ...data,
-    name: String(data.name).trim(),
-    email: String(data.email).trim().toLowerCase()
-  };
 
   try {
-    const newUser = database.insert(sanitizedData);
-    
-    if (!newUser) {
-      throw new Error('Database insert returned null or undefined');
+    let total = 0;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+
+      // Validate each item
+      if (!item || typeof item !== 'object') {
+        throw new Error(`Item at index ${i} is not a valid object`);
+      }
+
+      // Check for required properties
+      if (!('price' in item)) {
+        throw new Error(`Item at index ${i} is missing 'price' property`);
+      }
+
+      if (!('quantity' in item)) {
+        throw new Error(`Item at index ${i} is missing 'quantity' property`);
+      }
+
+      // Validate price
+      const price = Number(item.price);
+      if (isNaN(price)) {
+        throw new Error(`Item at index ${i} has invalid price: must be a number`);
+      }
+
+      if (price < 0) {
+        throw new Error(`Item at index ${i} has negative price: ${price}`);
+      }
+
+      // Validate quantity
+      const quantity = Number(item.quantity);
+      if (isNaN(quantity)) {
+        throw new Error(`Item at index ${i} has invalid quantity: must be a number`);
+      }
+
+      if (quantity < 0) {
+        throw new Error(`Item at index ${i} has negative quantity: ${quantity}`);
+      }
+
+      // Calculate line total
+      const lineTotal = price * quantity;
+
+      // Check for potential overflow or infinity
+      if (!isFinite(lineTotal)) {
+        throw new Error(`Calculation overflow at item index ${i}`);
+      }
+
+      total += lineTotal;
     }
-    
-    return newUser;
+
+    // Final check for overflow
+    if (!isFinite(total)) {
+      throw new Error('Total calculation resulted in overflow');
+    }
+
+    // Round to 2 decimal places to avoid floating point precision issues
+    return Math.round(total * 100) / 100;
   } catch (error) {
-    // Handle duplicate key errors
-    if (error.message.includes('duplicate') || error.message.includes('unique')) {
-      throw new Error('A user with this email already exists');
+    // Re-throw with context if it's our custom error
+    if (error.message.includes('Item') || 
+        error.message.includes('price') || 
+        error.message.includes('quantity') ||
+        error.message.includes('overflow')) {
+      throw error;
     }
-    throw new Error(`Failed to create user: ${error.message}`);
+    throw new Error(`Failed to calculate total: ${error.message}`);
   }
 }
 
 /**
- * Deletes a user by ID
- * @param {string|number} id - The user ID to delete
- * @returns {boolean} True if deletion was successful
- * @throws {Error} If id is invalid or deletion fails
+ * Validates an email address using comprehensive checks
+ * @param {string} email - The email address to validate
+ * @returns {boolean} True if email is valid, false otherwise
+ * @throws {Error} If email parameter is invalid type (null/undefined)
  */
-export function deleteUser(id) {
-  // Input validation
-  if (!id) {
-    throw new Error('User ID is required for deletion');
+export function validateEmail(email) {
+  // Handle null/undefined as error case
+  if (email === null || email === undefined) {
+    throw new Error('Email cannot be null or undefined');
   }
 
-  if (typeof id !== 'string' && typeof id !== 'number') {
-    throw new Error('User ID must be a string or number');
+  // Type validation
+  if (typeof email !== 'string') {
+    return false;
+  }
+
+  // Empty string check
+  if (email.trim().length === 0) {
+    return false;
+  }
+
+  // Length validation (RFC 5321)
+  if (email.length > 254) {
+    return false;
   }
 
   try {
-    // Check if user exists before attempting deletion
-    const user = database.find(id);
+    // Comprehensive email validation regex
+    // Validates: local-part@domain with proper character restrictions
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     
-    if (!user) {
-      throw new Error(`Cannot delete: User with ID ${id} not found`);
+    if (!emailRegex.test(email)) {
+      return false;
     }
 
-    const result = database.remove(id);
-    
-    // Verify deletion was successful
-    if (result === false) {
-      throw new Error('Database deletion operation failed');
+    // Additional validation checks
+    const [localPart, domain] = email.split('@');
+
+    // Validate local part (before @)
+    if (!localPart || localPart.length === 0 || localPart.length > 64) {
+      return false;
     }
-    
+
+    // Validate domain part (after @)
+    if (!domain || domain.length === 0) {
+      return false;
+    }
+
+    // Check for consecutive dots
+    if (email.includes('..')) {
+      return false;
+    }
+
+    // Check for leading/trailing dots
+    if (localPart.startsWith('.') || localPart.endsWith('.')) {
+      return false;
+    }
+
+    // Validate domain has at least one dot and valid TLD
+    const domainParts = domain.split('.');
+    if (domainParts.length < 2) {
+      return false;
+    }
+
+    // Check TLD (last part) is valid
+    const tld = domainParts[domainParts.length - 1];
+    if (!tld || tld.length < 2) {
+      return false;
+    }
+
     return true;
   } catch (error) {
-    // Re-throw with context if it's our custom error
-    if (error.message.includes('User') || error.message.includes('delete')) {
-      throw error;
-    }
-    throw new Error(`Failed to delete user: ${error.message}`);
-  }
-}
-
-/**
- * Updates a user's email address
- * @param {string|number} userId - The user ID to update
- * @param {string} email - The new email address
- * @returns {Object} The updated user object
- * @throws {Error} If parameters are invalid or update fails
- */
-export function updateUserEmail(userId, email) {
-  // Input validation
-  if (!userId) {
-    throw new Error('User ID is required');
-  }
-
-  if (typeof userId !== 'string' && typeof userId !== 'number') {
-    throw new Error('User ID must be a string or number');
-  }
-
-  if (!email || typeof email !== 'string') {
-    throw new Error('Email must be a valid string');
-  }
-
-  // Validate email format
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    throw new Error('Invalid email format');
-  }
-
-  // Sanitize email
-  const sanitizedEmail = email.trim().toLowerCase();
-
-  if (sanitizedEmail.length < 3 || sanitizedEmail.length > 254) {
-    throw new Error('Email length must be between 3 and 254 characters');
-  }
-
-  try {
-    const user = database.find(userId);
-    
-    if (!user) {
-      throw new Error(`User with ID ${userId} not found`);
-    }
-
-    // Prevent unnecessary updates
-    if (user.email === sanitizedEmail) {
-      return user;
-    }
-
-    // Create a copy to avoid mutating the original before save succeeds
-    const updatedUser = { ...user, email: sanitizedEmail };
-    
-    const savedUser = database.save(updatedUser);
-    
-    if (!savedUser) {
-      throw new Error('Database save operation failed');
-    }
-    
-    return savedUser;
-  } catch (error) {
-    // Handle duplicate email errors
-    if (error.message.includes('duplicate') || error.message.includes('unique')) {
-      throw new Error('This email is already in use by another user');
-    }
-    // Re-throw with context if it's our custom error
-    if (error.message.includes('User') || error.message.includes('email')) {
-      throw error;
-    }
-    throw new Error(`Failed to update user email: ${error.message}`);
+    // If any unexpected error occurs during validation, return false
+    return false;
   }
 }
