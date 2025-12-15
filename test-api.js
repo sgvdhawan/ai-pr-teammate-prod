@@ -23,4 +23,3 @@ export function updateUserEmail(userId, email) {
   database.save(user);
   return user;
 }
-
